@@ -4,27 +4,42 @@ import jwt  from 'jsonwebtoken';
 
 
 export const register = async (req, res) => {
-    const {username, email, password} = req.body;
-    //hash the password
+    const username = req.body.username?.trim();
+    const email = req.body.email?.trim().toLowerCase();
+    const password = req.body.password;
 
-    try{
+    if (!username || !email || !password) {
+        return res.status(400).json({ message: "Username, email, and password are required" });
+    }
+
+    try {
+        const existingUser = await prisma.user.findFirst({
+            where: {
+                OR: [{ username }, { email }],
+            },
+        });
+
+        if (existingUser) {
+            return res.status(409).json({ message: "Username or email already exists" });
+        }
         const hashedPassword = await bcrypt.hash(password, 10);
-        console.log(hashedPassword)
+        await prisma.user.create({
+            data: {
+                username,
+                email,
+                password: hashedPassword,
+            },
+        });
 
-    //Create a new user and save the db
-    const newUser = await prisma.user.create({
-        data:{
-            username,
-            email,
-            password: hashedPassword,
-        },
-    });
-    console.log(newUser)
-    res.status(201).json({message: "User Created successfully"})
+        return res.status(201).json({ message: "User created successfully" });
+    } catch (error) {
+        console.log(error);
 
-    }catch(error){
-        console.log(error)
-        res.status(500).json({message: "Failed to create user!"})
+        if (error?.code === 'P2002') {
+            return res.status(409).json({ message: "Username or email already exists" });
+        }
+
+        return res.status(500).json({ message: "Failed to create user!" });
     }
 };
 
@@ -43,24 +58,27 @@ export const login = async (req, res) => {
     if(!isPasswordValid) 
         return res.status(401).json({message:"Invalid Credentials"})
 
-    //generate cookie token and send to the user
-    // Set cookies before sending the response. Use `res.cookie` and send one response only.
     const age = 1000 * 60 *60 *24 *7;    
 
     const token = jwt.sign(
         {
-            id: user.id
+            id: user.id,
+            isAdmin: false,
+
         },
-        "process.env.JWT_SECRET_KEY",
+        process.env.JWT_SECRET_KEY,
         { expiresIn: age }
     );
    
-    res.
-        cookie("token", token, { 
-            httpOnly: true,
-             maxAge: age
-            });
-    return res.status(200).json({ message: 'Login Successful' });
+    const {password:userPassword, ...userInfo} = user
+
+    res.cookie("token", token, {
+        httpOnly: false,
+        maxAge: age,
+        sameSite: "lax",
+        path: "/"
+    });
+    return res.status(200).json(userInfo);
 
 }catch(err){
     console.log(err)
@@ -69,8 +87,8 @@ export const login = async (req, res) => {
 };
 
 export const logout = (req, res) => {
-    // Clear cookies on logout
-    res.clearCookie('token').status(200).json({message:"Logout successful"});
+    // Clear cookies on logout and send a single response
+    res.clearCookie('token');
     res.clearCookie('test2');
     return res.status(200).json({ message: 'Logged out' });
 }
