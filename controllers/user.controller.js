@@ -30,12 +30,13 @@ export const updateUser = async(req, res) => {
     const tokenUserId = req.userId;
     const {password, avatar, ...inputs} = req.body;
 
-    if(id !== tokenUserId){
-        return res.status(403).json({message: "Not authorized"});
+    if (id !== tokenUserId) {
+        return res.status(403).json({ message: "Not authorized" });
     }
+
     let updatedPassword = null;
-    try{
-        if(password){
+    try {
+        if (password) {
             updatedPassword = await bcrypt.hash(password, 10);
         }
 
@@ -45,16 +46,25 @@ export const updateUser = async(req, res) => {
             ...(avatar ? { avatar } : {}),
         };
 
+        if (Object.keys(updateData).length === 0) {
+            return res.status(400).json({ message: "No update fields provided" });
+        }
+
         const updatedUser = await prisma.user.update({
-            where: {id},
+            where: { id },
             data: updateData,
         });
 
-        const {password: userPassword, ...rest} = updatedUser;
+        const { password: userPassword, ...rest } = updatedUser;
         res.status(200).json(rest);
-    }catch(err){
-        console.log(err);
-        res.status(500).json({message:"Failed to update user"});
+    } catch (err) {
+        console.error("User update error:", err);
+
+        if (err?.code === "P2002") {
+            return res.status(409).json({ message: "Username or email already exists" });
+        }
+
+        return res.status(500).json({ message: "Failed to update user" });
     }
 }
 
