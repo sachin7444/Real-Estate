@@ -24,6 +24,8 @@ app.use('/api/users', userRoute);
 app.use('/api/chats', chatRoute);
 app.use('/api/messages', messageRoute);
 
-app.listen(8080, () => {
-    console.log('Server is running');
+const PORT = process.env.PORT || 8080;
+
+app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
 });
